@@ -11,61 +11,66 @@ import (
 )
 
 // AuthMiddleware verifies JWT tokens in incoming requests
+// middleware/auth.go
 func AuthMiddleware(jwtSecret []byte) gin.HandlerFunc {
     return func(c *gin.Context) {
-        // Get Authorization header
         authHeader := c.GetHeader("Authorization")
         if authHeader == "" {
-            c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
-            c.Abort()
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
             return
         }
 
-        // Check Bearer scheme
         parts := strings.Split(authHeader, " ")
         if len(parts) != 2 || parts[0] != "Bearer" {
-            c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
-            c.Abort()
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
             return
         }
 
         tokenString := parts[1]
 
-        // Parse and validate token
         token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-            // Validate signing method
-            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-                return nil, jwt.ErrSignatureInvalid
-            }
             return jwtSecret, nil
         })
 
-        if err != nil {
-            if err == jwt.ErrSignatureInvalid {
-                c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token signature"})
-            } else {
-                c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-            }
-            c.Abort()
+        if err != nil || !token.Valid {
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
             return
         }
 
-   claims, ok := token.Claims.(jwt.MapClaims)
-if !ok {
-    c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
-    return
+        claims, ok := token.Claims.(jwt.MapClaims)
+        if !ok {
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+            return
+        }
+
+        userIDFloat, ok := claims["user_id"].(float64)
+        if !ok {
+            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid user_id in token"})
+            return
+        }
+
+        role, _ := claims["role"].(string) // role may be missing → default to ""
+
+        userID := uint(userIDFloat)
+
+        c.Set("user_id", userID)
+        c.Set("email" , claims["email"]) // store email in context for profile endpoint
+        c.Set("role", role) // ← store role in gin context
+        c.Next()
+    }
 }
 
-userIDFloat, ok := claims["user_id"].(float64)
-if !ok {
-    c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid user_id in token"})
-    return
-}
-
-userID := uint(userIDFloat)  // Convert float64 → uint here
-
-c.Set("user_id", userID)     // Store as uint, not float64
-c.Next()
+// middleware/auth.go (add this function)
+func RequireRole(requiredRole string) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        role, exists := c.Get("role")
+        if !exists || role != requiredRole {
+            c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+                "error": "Access denied: insufficient permissions",
+            })
+            return
+        }
+        c.Next()
     }
 }
 

@@ -30,6 +30,8 @@ defer func() {
     sqlDB.Close()
 }()
 
+
+
 // // Auto-create tables
 // db.DB.AutoMigrate(&models.User{},&models.Product{}, &models.ProductImage{}, &models.Cart{}, &models.CartItem{})
 
@@ -40,6 +42,7 @@ if cfg.Environment == "development" {
 } else {
     log.Println("Skipping AutoMigrate (production / Neon)")
 }
+
 log.Println("Database schema migrated (GORM)")
 
     // Set Gin mode
@@ -95,9 +98,7 @@ if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
         protected.POST("/refresh-token", authHandler.RefreshToken)
         protected.POST("/logout", authHandler.Logout)
         protected.GET("/profile", getUserProfile)
-		protected.POST("/product", productHandler.CreateProduct)
-
-		protected.DELETE("/products/:id", productHandler.DeleteProduct)
+		
 		protected.GET("/products/search", productHandler.SearchProducts)
 		// Cart routes (all require authentication)
     protected.GET("/cart", cartHandler.GetCart)
@@ -106,6 +107,14 @@ if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
     protected.DELETE("/cart/items/:item_id", cartHandler.RemoveCartItem)
     protected.DELETE("/cart", cartHandler.ClearCart)
     }
+    // Admin-only routes (require "admin" role)
+admin := protected.Group("")
+admin.Use(middleware.RequireRole("admin"))
+{
+    admin.POST("/product", productHandler.CreateProduct)
+    admin.DELETE("/products/:id", productHandler.DeleteProduct)
+  
+}
 
     // Start server with configured host and port
     serverAddr := cfg.Server.Host + ":" + cfg.Server.Port
@@ -125,11 +134,25 @@ if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 
 
 func getUserProfile(c *gin.Context) {
-    userID, _ := c.Get("user_id")
+    userID, exists := c.Get("user_id")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+        return
+    }
+
     email, _ := c.Get("email")
-    
-    c.JSON(200, gin.H{
+    role, _ := c.Get("role") // role is set by AuthMiddleware
+
+    // Optional: fetch full user from DB if you want more fields
+    // var user models.User
+    // if err := h.db.DB.First(&user, userID).Error; err != nil {
+    //     c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user"})
+    //     return
+    // }
+
+    c.JSON(http.StatusOK, gin.H{
         "user_id": userID,
         "email":   email,
+        "role":    role, // ← now included (will be "user" or "admin")
     })
 }

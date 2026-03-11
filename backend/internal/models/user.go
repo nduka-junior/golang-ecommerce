@@ -12,6 +12,7 @@ type User struct {
     PasswordHash string    `json:"-"` // "-" means this won't be included in JSON
     CreatedAt    time.Time `json:"created_at"`
     UpdatedAt    time.Time `json:"updated_at"`
+    Role     string `gorm:"default:'user'"` // "user" or "admin"
 }
 
 // UserLogin represents login request data

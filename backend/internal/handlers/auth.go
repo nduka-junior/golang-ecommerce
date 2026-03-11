@@ -115,6 +115,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
+		"role":    user.Role,
 		"iat":     now.Unix(),
 		"exp":     now.Add(h.tokenExpiration).Unix(),
 	}
@@ -146,6 +147,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		"user_id": userID,
 		"iat":     now.Unix(),
 		"exp":     now.Add(h.tokenExpiration).Unix(),
+		
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
